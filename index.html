@@ -33,7 +33,7 @@
         /* 今日の記録エリア */
         #today-record .record-item {
             display: grid;
-            grid-template-columns: 1fr 60px 80px; /* ラベル / チェックボックス / 量 */
+            grid-template-columns: 1fr 60px 80px; 
             align-items: center;
             padding: 15px 0;
             border-bottom: 1px solid #eee;
@@ -47,7 +47,7 @@
             font-weight: bold;
         }
         .check-area {
-            justify-self: center; /* 中央寄せ */
+            justify-self: center;
         }
         input[type="checkbox"] {
             transform: scale(1.5);
@@ -58,10 +58,10 @@
             display: flex;
             align-items: center;
             gap: 5px;
-            justify-self: end; /* 右寄せ */
+            justify-self: end;
         }
         .amount-input {
-            width: 40px; /* 入力欄の幅を調整 */
+            width: 40px;
             padding: 5px;
             border: 1px solid #ccc;
             border-radius: 4px;
@@ -105,7 +105,7 @@
             padding: 8px 0;
             border-radius: 4px;
             font-size: 0.9em;
-            cursor: pointer; /* クリック可能であることを示す */
+            cursor: pointer;
             transition: background-color 0.2s;
         }
         /* ステータスの色 */
@@ -117,30 +117,30 @@
         
         /* --- 詳細モーダル（新設） --- */
         .modal {
-            display: none; /* 初期状態では非表示 */
+            display: none;
             position: fixed;
-            z-index: 1;
+            z-index: 100; /* 最前面に表示 */
             left: 0;
             top: 0;
             width: 100%;
             height: 100%;
             overflow: auto;
-            background-color: rgba(0,0,0,0.4); /* 背景を暗くする */
+            background-color: rgba(0,0,0,0.4);
         }
         .modal-content {
             background-color: #fefefe;
-            margin: 15% auto; /* 画面中央に配置 */
-            padding: 20px;
+            margin: 10% auto; 
+            padding: 25px;
             border: 1px solid #888;
-            width: 80%;
-            max-width: 300px;
+            width: 90%;
+            max-width: 350px;
             border-radius: 10px;
-            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+            box-shadow: 0 6px 12px rgba(0, 0, 0, 0.3);
         }
         .close {
             color: #aaa;
             float: right;
-            font-size: 28px;
+            font-size: 32px;
             font-weight: bold;
         }
         .close:hover,
@@ -149,12 +149,43 @@
             text-decoration: none;
             cursor: pointer;
         }
-        .detail-item {
-            padding: 8px 0;
-            border-bottom: 1px dotted #eee;
+        .detail-item-modal {
+            display: grid;
+            grid-template-columns: 1fr 50px 70px; /* ラベル / チェックボックス / 量 */
+            align-items: center;
+            padding: 10px 0;
+            border-bottom: 1px dotted #ccc;
         }
-        .detail-item:last-child {
+        .detail-item-modal:last-of-type {
             border-bottom: none;
+        }
+        .modal-amount-input {
+            width: 40px;
+            padding: 3px;
+            border: 1px solid #ccc;
+            border-radius: 3px;
+            text-align: right;
+        }
+        #save-edit-button {
+            width: 100%;
+            padding: 10px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 1em;
+            margin-top: 15px;
+        }
+        #save-edit-button:hover {
+            background-color: #0056b3;
+        }
+        .total-amount-modal {
+            margin-top: 15px;
+            padding-top: 10px;
+            border-top: 1px solid #eee;
+            font-weight: bold;
+            color: #333;
         }
     </style>
 </head>
@@ -198,25 +229,29 @@
         
         <button id="reset-button">🔄 全ての記録をリセット</button>
 
-        <p style="margin-top: 20px; text-align: center; font-size: 0.9em; color: #888;">チェックと量の入力は自動で保存されます。</p>
+        <p style="margin-top: 20px; text-align: center; font-size: 0.9em; color: #888;">今日の記録は自動保存されます。</p>
 
         <hr>
 
         <h2>📅 過去の記録</h2>
         
-        <div class="status-key">
-            </div>
-
         <div class="calendar-grid" id="calendar-view">
             </div>
     </div>
     
     <div id="detailModal" class="modal">
         <div class="modal-content">
-            <span class="close">&times;</span>
-            <h3 id="modal-date"></h3>
+            <span class="close" id="modal-close-button">&times;</span>
+            <h3 id="modal-date" style="margin-bottom: 20px;"></h3>
+            
             <div id="modal-details">
                 </div>
+
+            <div class="total-amount-modal">
+                合計導尿量: <span id="modal-total-amount">0 ml</span>
+            </div>
+            
+            <button id="save-edit-button">💾 変更を保存</button>
         </div>
     </div>
 
@@ -237,17 +272,20 @@
         const detailModal = document.getElementById('detailModal');
         const modalDate = document.getElementById('modal-date');
         const modalDetails = document.getElementById('modal-details');
-        const modalClose = document.querySelector('.close');
+        const modalTotalAmount = document.getElementById('modal-total-amount');
+        const modalClose = document.getElementById('modal-close-button');
+        const saveEditButton = document.getElementById('save-edit-button');
+        
+        // モーダルが現在表示している日付キーを保持
+        let currentModalDateKey = null; 
 
         // --- ユーティリティ関数 ---
-        // YYYY-MM-DD 形式の日付文字列を生成
         function getFormattedDate(date) {
             const year = date.getFullYear();
             const month = String(date.getMonth() + 1).padStart(2, '0');
             const day = String(date.getDate()).padStart(2, '0');
             return `${year}-${month}-${day}`;
         }
-        // YYYY-MM-DD形式を「Y年M月D日」形式に変換
         function formatDisplayDate(dateKey) {
             const parts = dateKey.split('-');
             return `${parseInt(parts[0])}年${parseInt(parts[1])}月${parseInt(parts[2])}日`;
@@ -265,6 +303,7 @@
 
             amountInputs.forEach(input => {
                 const time = input.getAttribute('data-time');
+                // 記録がない場合は空、ある場合は値を設定
                 input.value = records && records[time] ? (records[time].amount || '') : '';
             });
         };
@@ -285,7 +324,7 @@
             renderCalendar(); 
         };
 
-        // --- 2. 1ヶ月分の記録リセット（前回コードと同じ） ---
+        // --- 2. 1ヶ月分の記録リセット ---
 
         const resetRecords = () => {
             if (confirm('本当に全ての記録をリセットしてもよろしいですか？この操作は元に戻せません。')) {
@@ -307,13 +346,8 @@
             }
         };
 
-        // --- 3. カレンダー描画機能と詳細表示（更新） ---
+        // --- 3. カレンダー描画機能と詳細表示/編集（更新） ---
 
-        /**
-         * 特定の日の記録から完了ステータスと総量を計算する
-         * @param {string} dateKey - YYYY-MM-DD 形式の日付キー
-         * @returns {object} { status: string, totalAmount: number }
-         */
         const getDayStatusAndAmount = (dateKey) => {
             const storedRecords = localStorage.getItem(STORAGE_KEY_PREFIX + dateKey);
             
@@ -326,6 +360,7 @@
             let totalAmount = 0;
 
             TIME_SLOTS.forEach(time => {
+                // 記録がオブジェクト形式になっていることを前提
                 if (records[time] && records[time].checked === true) {
                     completedCount++;
                 }
@@ -358,7 +393,7 @@
                 calendarView.appendChild(header);
             });
 
-            // 30日分の表示
+            // 過去30日間の表示
             for (let i = 30; i >= 0; i--) {
                 const currentDate = new Date(today);
                 currentDate.setDate(currentDate.getDate() - i); 
@@ -373,56 +408,94 @@
                      cell.classList.add('today'); 
                 }
                 cell.innerHTML = `<strong>${dayOfMonth}</strong><br><small>${totalAmount}ml</small>`;
-                cell.setAttribute('data-date', dateKey); // 詳細表示のために日付キーを保持
+                cell.setAttribute('data-date', dateKey);
                 cell.addEventListener('click', () => showDetailModal(dateKey));
 
                 calendarView.appendChild(cell);
             }
         };
         
-        /**
-         * モーダルウィンドウで特定の日付の詳細を表示
-         * @param {string} dateKey - YYYY-MM-DD 形式の日付キー
-         */
+        // モーダルウィンドウで特定の日付の詳細を表示/編集
         const showDetailModal = (dateKey) => {
+            currentModalDateKey = dateKey; // 編集保存のために日付キーを保持
             const storedRecords = localStorage.getItem(STORAGE_KEY_PREFIX + dateKey);
             
-            modalDate.textContent = formatDisplayDate(dateKey) + ' の詳細';
+            modalDate.textContent = formatDisplayDate(dateKey) + ' の記録編集';
             modalDetails.innerHTML = ''; // 詳細コンテンツをクリア
             
-            if (!storedRecords) {
-                modalDetails.innerHTML = '<p style="text-align: center; color: #888;">この日は記録がありません。</p>';
-                detailModal.style.display = 'block';
-                return;
-            }
-
-            const records = JSON.parse(storedRecords);
+            const records = storedRecords ? JSON.parse(storedRecords) : {};
             let totalAmount = 0;
 
             TIME_SLOTS.forEach(time => {
                 const record = records[time] || { checked: false, amount: 0 };
                 totalAmount += record.amount;
                 
+                // 編集可能な入力要素を生成
                 const detailItem = document.createElement('div');
-                detailItem.className = 'detail-item';
+                detailItem.className = 'detail-item-modal';
                 detailItem.innerHTML = `
-                    <span style="font-weight: bold;">${TIME_LABELS[time]}:</span> 
-                    ${record.checked ? '✅ 実行' : '❌ 未実行'} / 
-                    ${record.amount} ml
+                    <span style="font-weight: bold;">${TIME_LABELS[time]}</span> 
+                    <input type="checkbox" data-modal-time="${time}" ${record.checked ? 'checked' : ''} style="justify-self: center;">
+                    <div style="display: flex; align-items: center;">
+                        <input type="number" class="modal-amount-input" data-modal-time="${time}" value="${record.amount || ''}" placeholder="量" min="0"> ml
+                    </div>
                 `;
                 modalDetails.appendChild(detailItem);
             });
             
-            // 合計行
-            const totalItem = document.createElement('div');
-            totalItem.className = 'detail-item';
-            totalItem.style.marginTop = '10px';
-            totalItem.innerHTML = `
-                <span style="font-weight: bold; color: #007bff;">合計導尿量: ${totalAmount} ml</span>
-            `;
-            modalDetails.appendChild(totalItem);
+            // 合計金額を更新
+            modalTotalAmount.textContent = `${totalAmount} ml`;
+            
+            // モーダル内の入力が変更されたら合計量をリアルタイム更新
+            modalDetails.querySelectorAll('input[type="checkbox"], input[type="number"]').forEach(input => {
+                input.addEventListener('change', updateModalTotalAmount);
+                input.addEventListener('input', updateModalTotalAmount);
+            });
 
             detailModal.style.display = 'block';
+        };
+
+        // モーダル内の入力値に基づいて合計導尿量を更新
+        const updateModalTotalAmount = () => {
+            let newTotal = 0;
+            modalDetails.querySelectorAll('.modal-amount-input').forEach(input => {
+                const amount = parseInt(input.value) || 0;
+                newTotal += amount;
+            });
+            modalTotalAmount.textContent = `${newTotal} ml`;
+        };
+
+        // 編集された記録を保存する関数
+        const saveEditedRecords = () => {
+            if (!currentModalDateKey) return;
+
+            const newRecords = {};
+            let totalAmount = 0;
+
+            TIME_SLOTS.forEach(time => {
+                const checkbox = modalDetails.querySelector(`input[type="checkbox"][data-modal-time="${time}"]`);
+                const amountInput = modalDetails.querySelector(`input[type="number"][data-modal-time="${time}"]`);
+                
+                const amount = parseInt(amountInput.value) || 0;
+                totalAmount += amount;
+
+                newRecords[time] = {
+                    checked: checkbox.checked,
+                    amount: amount
+                };
+            });
+            
+            // ローカルストレージに保存
+            localStorage.setItem(STORAGE_KEY_PREFIX + currentModalDateKey, JSON.stringify(newRecords));
+            
+            // 今日の記録の場合は、今日の記録エリアも更新
+            if (currentModalDateKey === todayKey) {
+                loadTodayRecords();
+            }
+
+            detailModal.style.display = 'none'; // モーダルを閉じる
+            renderCalendar(); // カレンダーを更新
+            alert(formatDisplayDate(currentModalDateKey) + 'の記録を保存しました。');
         };
 
         // --- モーダル制御 ---
@@ -434,24 +507,21 @@
                 detailModal.style.display = 'none';
             }
         }
+        saveEditButton.onclick = saveEditedRecords; // 保存ボタンに機能を割り当て
 
 
         // --- 初期化処理 ---
         document.addEventListener('DOMContentLoaded', () => {
-            // 今日の日付を表示
             document.getElementById('current-date').textContent = formatDisplayDate(todayKey) + ' の記録';
             
-            // 今日の記録を読み込む
             loadTodayRecords();
-            // カレンダーを初期描画
             renderCalendar();
 
-            // イベントリスナー: チェックボックスと量入力が変更されたら保存
+            // 今日の記録のイベントリスナー
             checkboxes.forEach(checkbox => {
                 checkbox.addEventListener('change', saveRecords);
             });
             amountInputs.forEach(input => {
-                // 'input'イベントでリアルタイムに保存、'change'イベントで念のため保存
                 input.addEventListener('input', saveRecords);
                 input.addEventListener('change', saveRecords);
             });
